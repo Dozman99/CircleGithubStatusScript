@@ -1,0 +1,1 @@
+bash ./deployment_manager.sh create
