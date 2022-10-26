@@ -1,25 +1,38 @@
+#!/bin/bash
+
 # ENV variables
-CIRCLE_PROJECT_USERNAME=${CIRCLE_PROJECT_USERNAME}
-CIRCLE_PROJECT_REPONAME=${CIRCLE_PROJECT_REPONAME}
-CIRCLE_BRANCH=${CIRCLE_BRANCH}
+CIRCLE_PROJECT_USERNAME="goody-h"
+CIRCLE_PROJECT_REPONAME="ysf-api"
+CIRCLE_BRANCH="master"
+GH_DEPLOY_APP_PEM=$( cat ./cxepi-github-deployment-manager.2022-08-25.private-key.pem )
 
-# Configuration
-PEM=$( cat ./cxepi-github-deployment-manager.2022-08-25.private-key.pem )
-GITHUB_APP_ID="188413"
-APP_INSTALLATION_ID="24768077"
+if [[ -z $GITHUB_APP_ID ]]
+  then
+    GITHUB_APP_ID="235300"  # your github app id
+  fi
 
+if [[ -z $APP_INSTALLATION_ID ]]
+  then
+    APP_INSTALLATION_ID="28954510" # your app installation id
+  fi
+
+
+# variables
 GITHUB_API="https://api.github.com"
 
 get_app_token() {
+  echo "$GH_DEPLOY_APP_PEM" > ./temp.pem
+  PEM="./temp.pem"
+
   NOW=$( date +%s )
-  IAT=$((${NOW} - 10))
-  EXP=$((${NOW} + 600))
+  IAT=$((NOW - 10))
+  EXP=$((NOW + 600))
   HEADER_RAW='{"alg":"RS256"}'
-  HEADER=$( echo -n "${HEADER_RAW}" | openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n' )
-  PAYLOAD_RAW='{"iat":'"${IAT}"',"exp":'"${EXP}"',"iss":'"${GITHUB_APP_ID}"'}'
-  PAYLOAD=$( echo -n "${PAYLOAD_RAW}" | openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n' )
+  HEADER=$( echo "${HEADER_RAW}" | tr -d '\n' | openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n' )
+  PAYLOAD_RAW='{"iat":'"${IAT}"',"exp":'"${EXP}"',"iss":"'"${GITHUB_APP_ID}"'"}'
+  PAYLOAD=$( echo "${PAYLOAD_RAW}" | tr -d '\n' | openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n' )
   HEADER_PAYLOAD="${HEADER}"."${PAYLOAD}"
-  SIGNATURE=$( openssl dgst -sha256 -sign <(echo -n "${PEM}") <(echo -n "${HEADER_PAYLOAD}") | openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n' )
+  SIGNATURE=$( echo "${HEADER_PAYLOAD}" | tr -d '\n' | openssl dgst -sha256 -sign ${PEM} | openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n' )
   JWT="${HEADER_PAYLOAD}"."${SIGNATURE}"
 
   APP_TOKEN_STRING=$(
@@ -27,13 +40,15 @@ get_app_token() {
     -s \
     -X POST \
     -H "Accept: application/vnd.github.machine-man-preview+json" \
+    -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${JWT}" \
     "${GITHUB_API}/app/installations/${APP_INSTALLATION_ID}/access_tokens" \
     | tr -d '\n' \
-    | sed -E "s/^.*\"token\"\s*:\s*\"([^\"]+)\".*$/\1/g"
+    | sed -E 's/^.*"token" *: *"([^"]+)".*$/\1/g'
   )
 
- echo $APP_TOKEN_STRING
+  rm $PEM
+  echo "$APP_TOKEN_STRING"
 }
 
 get_repo_fullname() {
@@ -47,14 +62,12 @@ get_repo_fullname() {
 }
 
 create() {
-  REF=$2
   if [[ -z $REF ]]
     then
       REF=${CIRCLE_BRANCH}
     fi
 
-  ENV=$2
-  if [[ -z $REF ]]
+  if [[ -z $ENV ]]
     then
       ENV="dev"
     fi
@@ -64,13 +77,13 @@ create() {
     -s \
     -X POST \
     -H "Accept: application/vnd.github.machine-man-preview+json" \
-    -H "Authorization: token  $(get_app_token)" \
     -H "Content-Type: application/json" \
-    -d '{"ref": "'${REF}'", "environment": "'${ENV}'", "auto_merge": false}' \
+    -H "Authorization: token  $(get_app_token)" \
+    -d '{"ref": "'"${REF}"'", "environment": "'"${ENV}"'", "auto_merge": false}' \
     "${GITHUB_API}/repos/$(get_repo_fullname)/deployments"
   )
 
-  echo $DEPLOYMENT
+  echo "$DEPLOYMENT"
 }
 
 status() {
@@ -95,11 +108,11 @@ status() {
     -H "Accept: application/vnd.github.machine-man-preview+json" \
     -H "Authorization: token  $(get_app_token)" \
     -H "Content-Type: application/json" \
-    -d '{"state": "'${STATE}'"}' \
+    -d '{"state": "'"${STATE}"'"}' \
     "${GITHUB_API}/repos/$(get_repo_fullname)/deployments/${ID}/statuses"
   )
 
-  echo $STATUS_UPDATE
+  echo "$STATUS_UPDATE"
 }
 
 POSITIONAL_ARGS=()
@@ -116,7 +129,7 @@ while [[ $# -gt 0 ]]; do
       shift # past argument
       shift # past value
       ;;
-    -*|--*)
+    -*)
       echo "Unknown option $1"
       exit 1
       ;;
