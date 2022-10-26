@@ -9,8 +9,6 @@ CIRCLE_PROJECT_USERNAME="goody-h"
 CIRCLE_PROJECT_REPONAME="ysf-api"
 CIRCLE_BRANCH="master"
 CIRCLE_ENVIRONMENT="dev"
-
-
 GH_DEPLOY_APP_PEM=$( cat "${SCRIPT_DIR}/cxepi-github-deployment-manager.2022-08-25.private-key.pem" )
 
 if [[ -z $GITHUB_APP_ID ]]

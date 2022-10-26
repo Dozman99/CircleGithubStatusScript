@@ -1,2 +1,1 @@
 "# GitLabStatusScript" 
-"# GitHabStatusScript-" 
